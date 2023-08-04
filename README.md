@@ -8,7 +8,7 @@ BackupBuddy is a powerful and user-friendly backup utility that helps you safegu
   
 ## Installation
 
-- Make sure you have python3 installed
+- Make sure you have python3 installed.
 
 ## Usage
 
