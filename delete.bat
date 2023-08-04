@@ -23,7 +23,6 @@ REM Loop through each line in the text file.
 for /f "usebackq delims=" %%a in ("%file_list%") do (
     REM Trim leading and trailing spaces from the path.
     set "file_path=%%a"
-    set "file_path=!file_path: =!"
     
     REM Construct the full path to the file for deletion.
     set "full_path=!delete_location!\!file_path!"
