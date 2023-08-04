@@ -7,7 +7,7 @@ BackupBuddy is a powerful and user-friendly backup utility that helps you safegu
 - Might not delete all your files, I'm not responsible if it does.
   
 ## Installation
-.
+
 - Make sure you have python3 installed
 
 ## Usage
