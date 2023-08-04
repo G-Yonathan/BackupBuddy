@@ -21,7 +21,7 @@ Run BackupBuddy from the command line or using the GUI (jk there's no GUI 😄)
 3. Go make some changes! You can add new files, modify existing files, and delete files.
 4. Run the script without any flags:
    - ```python main.py```
-5. A new folder will be created in the backups folder containing a log file (if you need it) and more importantly a "to_tranfer" folder. This is the folder that should be transferred to your backup device.
+5. A new folder will be created in the backups folder containing a log file and more importantly a "to_tranfer" folder. This is the folder that should be transferred to your backup device.
 6. Once you have transferred the "to_transfer" folder, you need to perform two steps:
    - Copy the contents of the additions folder to your backup location. Allow file explorer to merge.
    - Run the delete.bat script directly from it's location, providing full path to the backup location as an argument. This will delete all the files that you have deleted since the last backup. You can view these files prior to running the script in "to_delete.txt" to ensure you're not deleting anything you want to keep.
