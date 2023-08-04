@@ -16,7 +16,7 @@ Run BackupBuddy from the command line or using the GUI (jk there's no GUI 😄)
 
 1. Configure the folder that you want to backup (choose one folder per instance of the script).
    - ```python main.py --folder-to-backup "C:\folder\to\backup"```
-2. Complete your first backup without using the script (the script won't really help here as everything needs to be copied anyways). Once that's done, you can run the script with ```--init``` flag to begin tracking changes. This will create a "backups" folder.
+2. Complete your first backup without using the script (the script won't really help here as everything needs to be copied anyways). Once that's done, you can run the script with ```--init``` flag to begin tracking changes. This will create a "backups" folder with the current state of your files.
    - ```python main.py --init```
 3. Go make some changes! You can add new files, modify existing files, and delete files.
 4. Run the script without any flags:
