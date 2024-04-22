@@ -275,11 +275,12 @@ def main():
         logger = setup_logging(log_file=os.path.join(backup_folder, LOG_FILE_NAME))
         if parsed_args.init:
             init(logger, config_data, backup_folder)
-            logger.info("Finished init! You can now backup :)")
+            logger.info("Finished init! Changes will now be tracked :)")
         else:
             try:
                 backup(logger, config_data, backup_folder, backups_folder_name)
                 logger.info("Created backup!")
+                logger.info(f"Backup path: {os.path.join(os.getcwd(), backup_folder)}")
             except PreviousBackupNotFoundException as e:
                 logger.error("Previous backup not found. Please make sure to run script with --init flag before creating first backup.")
 
