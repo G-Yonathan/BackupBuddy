@@ -248,8 +248,8 @@ def main():
 
     parser.add_argument("--backup-device-name", type=str,
                         help="The name of the backup device.", required=True)
-    parser.add_argument("--folder-to-backup", type=str,
-                        help="Please provide full path. Needs to be provided only once.")
+    parser.add_argument("--folder-to-backup", type=str, nargs='+',
+                        help="Please provide one or more full paths separated by spaces.")
     parser.add_argument("--init", action="store_true",
                         help="Run this once you have configured everything and backed everything up. Program will start tracking from here.")
 
