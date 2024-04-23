@@ -1,225 +1,232 @@
-import os
-import pickle
-import shutil
-import argparse
-import json
-import sys
-from datetime import datetime
 import logging
+import os
+import json
+import shutil
+from datetime import datetime
 
-BACKUPS_FOLDER_NAME_FORMAT = "backups_{0}"
-TO_TRANSFER_FOLDER_NAME = "to_transfer"
-FILE_INFO_FILE_NAME = "file_info.pkl"
+BACKUPS_FOLDER_NAME_FORMAT = "backups\\backups_{0}"
+CONFIG_FILE_NAME = "new_config.json"
+FILE_INFO_FILE_NAME = "file_info.json"
+LOG_FILE_PATH = "logs"
 DELETE_BAT_FILE_NAME = "delete.bat"
-LOG_FILE_NAME = "app.log"
-TO_DELETE_FILE_NAME = "to_delete.txt"
 
 
-def gather_file_info(root_folder):
-    """
-    Gathers file information recursively from a given root folder.
-    root_folder: The root folder from which to start gathering file information.
-    root_folder type: string
-    return: A dictionary containing file information with relative paths as keys and modification times as values.
-    return type: dict
-    """
-    file_info = {}
+class BackupManager:
+    def __init__(self, backup_device_name):
+        self.backup_device_name = backup_device_name
+        self.backups_folder_name = BACKUPS_FOLDER_NAME_FORMAT.format(backup_device_name)
+        self.new_snapshot_folder = os.path.join(self.backups_folder_name,
+                                                datetime.now().strftime("%Y_%m_%d__%H_%M_%S__%f"))
+        self.config_file_path = os.path.join(self.backups_folder_name, CONFIG_FILE_NAME)
+        self.config_data = self._load_config()
+        self.logger = None
 
-    for folder_path, _, file_names in os.walk(root_folder):
-        for file_name in file_names:
-            file_path = os.path.join(folder_path, file_name)
-            relative_file_path = os.path.relpath(file_path, start=root_folder)
-            file_mod_time = os.path.getmtime(file_path)
-            file_info[relative_file_path] = file_mod_time
+    def set_logger(self, logger):
+        self.logger = logger
 
-    return file_info
+    '''
+    Config management
+    '''
 
+    def _load_config(self):
+        if os.path.exists(self.config_file_path):
+            with open(self.config_file_path, 'r') as f:
+                return json.load(f)
+        else:
+            return {}
 
-def save_file_info_to_file(file_info, output_file):
-    """
-    Saves file information to a pickle file.
-    file_info: The file information to be saved.
-    file_info type: dict
-    output_file: The path to the output file.
-    output_file type: string
-    return: None
-    """
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    with open(output_file, 'wb') as f:
-        pickle.dump(file_info, f)
+    def _save_config(self):
+        os.makedirs(self.backups_folder_name, exist_ok=True)
+        with open(self.config_file_path, 'w') as f:
+            json.dump(self.config_data, f, indent=4)
 
+    def get_tracked_folders(self):
+        if 'backup_locations' in self.config_data and self.backup_device_name in self.config_data['backup_locations']:
+            return self.config_data['backup_locations'][self.backup_device_name]
+        else:
+            return []
 
-def load_file_info_from_file(input_file):
-    """
-    Loads file information from a pickle file.
-    input_file: The path to the input file.
-    input_file type: string
-    return: The loaded file information.
-    return type: dict
-    """
-    with open(input_file, 'rb') as f:
-        file_info = pickle.load(f)
-    return file_info
+    def add_folders(self, folders_to_add):
+        if 'backup_locations' not in self.config_data:
+            self.config_data['backup_locations'] = {}
+        if self.backup_device_name not in self.config_data['backup_locations']:
+            self.config_data['backup_locations'][self.backup_device_name] = []
 
+        self.config_data['backup_locations'][self.backup_device_name].extend(folders_to_add)
+        self._save_config()
 
-def copy_file(source_file, destination_file, logger):
-    """
-    Copies a file from source to destination.
-    source_file: The path to the source file.
-    source_file type: string
-    destination_file: The path to the destination file.
-    destination_file type: string
-    logger: The logger object to log messages.
-    logger type: logging.Logger
-    return: None
-    """
-    try:
-        shutil.copy2(source_file, destination_file)
-        logger.debug(f"File '{source_file}' copied to '{destination_file}' successfully.")
-    except FileNotFoundError:
-        logger.debug("File not found.")
-    except shutil.SameFileError:
-        logger.debug("Source and destination are the same file.")
-    except PermissionError:
-        logger.debug("Permission error while copying the file.")
-    except Exception as e:
-        logger.debug(f"An error occurred: {e}")
+    def remove_folders(self, folders_to_remove):
+        if 'backup_locations' in self.config_data and self.backup_device_name in self.config_data['backup_locations']:
+            current_folders = self.config_data['backup_locations'][self.backup_device_name]
+            updated_folders = [folder for folder in current_folders if folder not in folders_to_remove]
+            self.config_data['backup_locations'][self.backup_device_name] = updated_folders
+            self._save_config()
 
+    '''
+    Initializing
+    '''
 
-def load_config(config_file):
-    """
-    Loads configuration data from a JSON file.
-    config_file: The path to the configuration file.
-    config_file type: string
-    return: The loaded configuration data.
-    return type: dict
-    """
-    try:
-        with open(config_file, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    def init_backup(self, folders_to_track):
+        os.makedirs(self.new_snapshot_folder)
+
+        file_info = {}
+
+        # Gather file info for newly initialized folders
+        for folder in folders_to_track:
+            folder_info = self._gather_file_info(folder)
+            file_info[folder] = folder_info
+
+        # Get file info from the previous backup (if available)
+        previous_backup_info = self._get_previous_backup_info()
+
+        # Include file info from previous backup for existing folders not in the current initialization
+        for folder, info in previous_backup_info.items():
+            if folder not in file_info:
+                file_info[folder] = info
+
+        # Save the merged file info to the new backup folder
+        self._save_file_info(file_info, os.path.join(self.new_snapshot_folder, FILE_INFO_FILE_NAME))
+        self.logger.info(f"Initialized backup tracking for folders with snapshot at '{self.new_snapshot_folder}'.")
+
+    def _get_previous_backup_info(self):
+        # Retrieve the latest previous backup folder
+        previous_backup_folder = self._get_folder_with_latest_snapshot()
+        if previous_backup_folder:
+            previous_file_info_file = os.path.join(previous_backup_folder, FILE_INFO_FILE_NAME)
+            if os.path.exists(previous_file_info_file):
+                with open(previous_file_info_file, 'r') as f:
+                    return json.load(f)
         return {}
 
+    def _get_folder_with_latest_snapshot(self):
+        # Get a list of all snapshots
+        snapshots = [os.path.join(self.backups_folder_name, file) for file in os.listdir(self.backups_folder_name)]
 
-def save_config(config_file, config_data):
-    """
-    Saves configuration data to a JSON file.
-    config_file: The path to the configuration file.
-    config_file type: string
-    config_data: The configuration data to be saved.
-    config_data type: dict
-    return: None
-    """
-    os.makedirs(os.path.dirname(config_file), exist_ok=True)
-    with open(config_file, 'w') as f:
-        json.dump(config_data, f, indent=4)
+        # Filter out files that aren't folders
+        snapshots = [file for file in snapshots if
+                     os.path.isdir(file)]
 
+        # Filter out the new snapshot folder if it exists
+        snapshots = [folder for folder in snapshots
+                     if folder != self.new_snapshot_folder]
 
-def get_previous_backup_file_info(backups_folder_name):
-    """
-    Gets file information from the previous backup folder.
-    backups_folder_name: The name of the backups folder.
-    backups_folder_name type: string
-    return: File information from the previous backup folder.
-    return type: dict
-    """
-    # Get a list of all folders in the directory
-    folders = [f for f in os.listdir(backups_folder_name) if os.path.isdir(os.path.join(backups_folder_name, f))]
+        # Sort in reverse
+        snapshots = sorted(snapshots, reverse=True)
 
-    # Sort the folders by name (in ascending order by default)
-    sorted_folders = sorted(folders)
+        for folder in snapshots:
+            if FILE_INFO_FILE_NAME in os.listdir(folder):
+                return folder
+        return None
 
-    if sorted_folders:
-        # Choose the last folder in the sorted list (the one with the greatest name)
+    def _gather_file_info(self, root_folder):
+        file_info = {}
+        for folder_path, _, file_names in os.walk(root_folder):
+            for file_name in file_names:
+                file_path = os.path.join(folder_path, file_name)
+                relative_file_path = os.path.relpath(file_path, start=root_folder)
+                file_mod_time = os.path.getmtime(file_path)
+                file_info[relative_file_path] = file_mod_time
+        return file_info
+
+    def _save_file_info(self, file_info, output_file):
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        with open(output_file, 'w') as f:
+            json.dump(file_info, f, indent=4)
+
+    def init_all_backups(self):
+        if 'backup_locations' in self.config_data and self.backup_device_name in self.config_data['backup_locations']:
+            folders_to_track = self.config_data['backup_locations'][self.backup_device_name]
+            self.init_backup(folders_to_track)
+        else:
+            self.logger.error(f"No tracked folders found for backup device '{self.backup_device_name}'.")
+
+    '''
+    Backups
+    '''
+
+    def backup(self):
         try:
-            latest_folder = os.path.join(backups_folder_name, sorted_folders[-2])
-        except IndexError:
-            raise PreviousBackupNotFoundException()
-        return load_file_info_from_file(os.path.join(latest_folder, FILE_INFO_FILE_NAME))
-    else:
-        raise FileNotFoundError
+            # Ensure all configured folders have been initialized
+            previous_backup_info = self._get_previous_backup_info()
 
+            initialized_folders = set(previous_backup_info.keys())
+            configured_folders = set(self.get_tracked_folders())
 
-def update_config(config_file, config_data, parsed_args):
-    config_data["folder_to_backup"] = parsed_args.folder_to_backup
-    save_config(config_file, config_data)
+            if not configured_folders:
+                self.logger.error("No folders configured for backup.")
+                return
 
+            uninitialized_folders = configured_folders - initialized_folders
 
-def init(logger, config_data, backup_folder):
-    """
-    Initializes the backup process.
-    logger: The logger object to log messages.
-    logger type: logging.Logger
-    config_data: The configuration data.
-    config_data type: dict
-    backup_folder: The path to the backup folder.
-    backup_folder type: string
-    return: None
-    """
-    file_info = gather_file_info(config_data["folder_to_backup"])
-    save_file_info_to_file(file_info, os.path.join(backup_folder, FILE_INFO_FILE_NAME))
-    logger.debug(f"Completed init - created initial backup folder: {backup_folder}")
+            if uninitialized_folders:
+                self.logger.error(f"The following folders have not been initialized: {uninitialized_folders}")
+                return
 
+            to_transfer_path = os.path.join(self.new_snapshot_folder, "to_transfer")
+            os.makedirs(to_transfer_path)
 
-class PreviousBackupNotFoundException(Exception):
-    pass
+            file_info = {}
 
+            # Perform backup for each folder
+            for folder in configured_folders:
+                previous_snapshot_info = previous_backup_info[folder]
 
-def backup(logger, config_data, backup_folder, backups_folder_name):
-    """
-    Performs the backup process.
-    logger: The logger object to log messages.
-    logger type: logging.Logger
-    config_data: The configuration data.
-    config_data type: dict
-    backup_folder: The path to the backup folder.
-    backup_folder type: string
-    backups_folder_name: The name of the backups folder.
-    backups_folder_name type: string
-    return: None
-    """
-    try:
-        previous_backup_file_info = get_previous_backup_file_info(backups_folder_name)
-    except FileNotFoundError:
-        raise PreviousBackupNotFoundException()
+                file_info[folder] = self._gather_file_info(folder)
+                additions_path = os.path.join(to_transfer_path, os.path.basename(folder))
 
-    folder_to_backup = config_data["folder_to_backup"]
-    to_transfer_path = os.path.join(backup_folder, TO_TRANSFER_FOLDER_NAME)
-    additions_path = os.path.join(to_transfer_path, "additions")
+                # Copy new or modified files to additions folder
+                for relative_file_path, modification_time in file_info[folder].items():
+                    if (relative_file_path not in previous_snapshot_info or
+                            modification_time != previous_snapshot_info[relative_file_path]):
+                        source_file_path = os.path.join(folder, relative_file_path)
+                        destination_file_path = os.path.join(additions_path, relative_file_path)
 
-    os.makedirs(to_transfer_path)
+                        destination_dir = os.path.dirname(destination_file_path)
+                        os.makedirs(destination_dir, exist_ok=True)
 
-    file_info = gather_file_info(folder_to_backup)
+                        shutil.copy2(source_file_path, destination_file_path)
+                        self.logger.debug(f"File '{source_file_path}' copied to '{destination_file_path}'.")
 
-    # Copy new files to additions folder.
-    logger.debug("Starting to copy additions")
-    for relative_file_path, modification_time in file_info.items():
-        if relative_file_path not in previous_backup_file_info or \
-                modification_time != previous_backup_file_info[relative_file_path]:
+                # Write deleted file paths to a file
+                deleted_paths_file = os.path.join(to_transfer_path, f"{os.path.basename(folder)}_deleted_paths.txt")
+                with open(deleted_paths_file, "w+") as f:
+                    for relative_file_path in previous_snapshot_info:
+                        if relative_file_path not in file_info[folder]:
+                            f.write(relative_file_path + "\n")
 
-            source_file_path = os.path.join(folder_to_backup, relative_file_path)
-            destination_file_path = os.path.join(additions_path, relative_file_path)
+            self._copy_file(source_file=DELETE_BAT_FILE_NAME,
+                            destination_file=to_transfer_path)
 
-            destination_file_path_dir, _ = os.path.split(destination_file_path)
-            os.makedirs(destination_file_path_dir, exist_ok=True)
+            # Save new snapshot file information
+            self._save_file_info(file_info, os.path.join(self.new_snapshot_folder, FILE_INFO_FILE_NAME))
 
-            copy_file(source_file=source_file_path,
-                      destination_file=destination_file_path,
-                      logger=logger)
+            self.logger.info("Backup completed successfully.")
 
-    # Make file with paths that have been deleted since the last backup.
-    logger.debug(f"Starting to write file paths to {TO_DELETE_FILE_NAME}")
-    with open(os.path.join(to_transfer_path, TO_DELETE_FILE_NAME), "w+") as to_delete_file:
-        for relative_file_path in previous_backup_file_info:
-            if relative_file_path not in file_info:
-                to_delete_file.write(relative_file_path + "\n")
+        except Exception as e:
+            self.logger.error(f"Backup failed: {e}")
 
-    logger.debug(f"Copying {DELETE_BAT_FILE_NAME} to {to_transfer_path}")
-    copy_file(source_file=DELETE_BAT_FILE_NAME,
-              destination_file=to_transfer_path,
-              logger=logger)
-
-    save_file_info_to_file(file_info, os.path.join(backup_folder, FILE_INFO_FILE_NAME))
+    def _copy_file(self, source_file, destination_file):
+        """
+        Copies a file from source to destination.
+        source_file: The path to the source file.
+        source_file type: string
+        destination_file: The path to the destination file.
+        destination_file type: string
+        logger: The logger object to log messages.
+        logger type: logging.Logger
+        return: None
+        """
+        try:
+            shutil.copy2(source_file, destination_file)
+            self.logger.debug(f"File '{source_file}' copied to '{destination_file}' successfully.")
+        except FileNotFoundError:
+            self.logger.debug("File not found.")
+        except shutil.SameFileError:
+            self.logger.debug("Source and destination are the same file.")
+        except PermissionError:
+            self.logger.debug("Permission error while copying the file.")
+        except Exception as e:
+            self.logger.debug(f"An error occurred: {e}")
 
 
 def setup_logging(log_file):
@@ -244,45 +251,55 @@ def setup_logging(log_file):
 
 
 def main():
+    import argparse
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--backup-device-name", type=str,
                         help="The name of the backup device.", required=True)
-    parser.add_argument("--folder-to-backup", type=str, nargs='+',
-                        help="Please provide one or more full paths separated by spaces.")
-    parser.add_argument("--init", action="store_true",
-                        help="Run this once you have configured everything and backed everything up. Program will start tracking from here.")
+    parser.add_argument("--view-tracked-folders", action="store_true",
+                        help="View the tracked folders for the specified backup device.")
+    parser.add_argument("--add-folders", nargs='+',
+                        help="Add new folder paths to track for the specified backup device.")
+    parser.add_argument("--remove-folders", nargs='+',
+                        help="Remove folder paths from tracking for the specified backup device.")
+    parser.add_argument("--init", nargs='+',
+                        help="Initialize backup tracking with snapshot for specific folders.")
+    parser.add_argument("--init-all", action="store_true",
+                        help="Initialize backup tracking with snapshot for all tracked folders.")
 
     parsed_args = parser.parse_args()
 
-    if (parsed_args.folder_to_backup and parsed_args.backup_device_name) or (parsed_args.init and parsed_args.backup_device_name) or parsed_args.backup_device_name:
-        pass
-    else:
-        parser.error("Invalid combination of arguments.")
+    manager = BackupManager(parsed_args.backup_device_name)
+    os.makedirs(os.path.join(manager.backups_folder_name, LOG_FILE_PATH), exist_ok=True)
+    logger = setup_logging(log_file=os.path.join(manager.backups_folder_name, LOG_FILE_PATH,
+                                                 os.path.basename(manager.new_snapshot_folder) + ".log"))
+    manager.set_logger(logger)
 
-    backups_folder_name = BACKUPS_FOLDER_NAME_FORMAT.format(parsed_args.backup_device_name)
-
-    config_file = os.path.join(backups_folder_name, "config.json")
-    config_data = load_config(config_file)
-
-    if parsed_args.folder_to_backup:
-        update_config(config_file, config_data, parsed_args)
-    elif "folder_to_backup" not in config_data:
-        print("Please provide --folder-to-backup flag.")
-    else:
-        backup_folder = os.path.join(backups_folder_name, datetime.now().strftime("%Y_%m_%d__%H_%M_%S__%f"))
-        os.makedirs(backup_folder)
-        logger = setup_logging(log_file=os.path.join(backup_folder, LOG_FILE_NAME))
-        if parsed_args.init:
-            init(logger, config_data, backup_folder)
-            logger.info("Finished init! Changes will now be tracked :)")
+    if parsed_args.view_tracked_folders:
+        tracked_folders = manager.get_tracked_folders()
+        if tracked_folders:
+            logger.info(f"Tracked folders for backup device '{parsed_args.backup_device_name}':")
+            for folder in tracked_folders:
+                logger.info(f"- {folder}")
         else:
-            try:
-                backup(logger, config_data, backup_folder, backups_folder_name)
-                logger.info("Created backup!")
-                logger.info(f"Backup path: {os.path.join(os.getcwd(), backup_folder)}")
-            except PreviousBackupNotFoundException as e:
-                logger.error("Previous backup not found. Please make sure to run script with --init flag before creating first backup.")
+            logger.info(f"No tracked folders found for backup device '{parsed_args.backup_device_name}'.")
+    elif parsed_args.add_folders:
+        manager.add_folders(parsed_args.add_folders)
+        logger.info(f"Added folders to backup device '{parsed_args.backup_device_name}':")
+        for folder in parsed_args.add_folders:
+            logger.info(f"- {folder}")
+    elif parsed_args.remove_folders:
+        manager.remove_folders(parsed_args.remove_folders)
+        logger.info(f"Removed folders from backup device '{parsed_args.backup_device_name}':")
+        for folder in parsed_args.remove_folders:
+            logger.info(f"- {folder}")
+    elif parsed_args.init:
+        manager.init_backup(parsed_args.init)
+    elif parsed_args.init_all:
+        manager.init_all_backups()
+    else:
+        manager.backup()
 
 
 if __name__ == "__main__":
