@@ -12,9 +12,9 @@ DELETE_BAT_FILE_NAME = "delete.bat"
 
 
 class BackupManager:
-    def __init__(self, backup_device_name):
-        self.backup_device_name = backup_device_name
-        self.backups_folder_name = BACKUPS_FOLDER_NAME_FORMAT.format(backup_device_name)
+    def __init__(self, backup_location_name):
+        self.backup_location_name = backup_location_name
+        self.backups_folder_name = BACKUPS_FOLDER_NAME_FORMAT.format(backup_location_name)
         self.new_snapshot_folder = os.path.join(self.backups_folder_name,
                                                 datetime.now().strftime("%Y_%m_%d__%H_%M_%S__%f"))
         self.config_file_path = os.path.join(self.backups_folder_name, CONFIG_FILE_NAME)
@@ -41,25 +41,25 @@ class BackupManager:
             json.dump(self.config_data, f, indent=4)
 
     def get_tracked_folders(self):
-        if 'backup_locations' in self.config_data and self.backup_device_name in self.config_data['backup_locations']:
-            return self.config_data['backup_locations'][self.backup_device_name]
+        if 'backup_locations' in self.config_data and self.backup_location_name in self.config_data['backup_locations']:
+            return self.config_data['backup_locations'][self.backup_location_name]
         else:
             return []
 
     def add_folders(self, folders_to_add):
         if 'backup_locations' not in self.config_data:
             self.config_data['backup_locations'] = {}
-        if self.backup_device_name not in self.config_data['backup_locations']:
-            self.config_data['backup_locations'][self.backup_device_name] = []
+        if self.backup_location_name not in self.config_data['backup_locations']:
+            self.config_data['backup_locations'][self.backup_location_name] = []
 
-        self.config_data['backup_locations'][self.backup_device_name].extend(folders_to_add)
+        self.config_data['backup_locations'][self.backup_location_name].extend(folders_to_add)
         self._save_config()
 
     def remove_folders(self, folders_to_remove):
-        if 'backup_locations' in self.config_data and self.backup_device_name in self.config_data['backup_locations']:
-            current_folders = self.config_data['backup_locations'][self.backup_device_name]
+        if 'backup_locations' in self.config_data and self.backup_location_name in self.config_data['backup_locations']:
+            current_folders = self.config_data['backup_locations'][self.backup_location_name]
             updated_folders = [folder for folder in current_folders if folder not in folders_to_remove]
-            self.config_data['backup_locations'][self.backup_device_name] = updated_folders
+            self.config_data['backup_locations'][self.backup_location_name] = updated_folders
             self._save_config()
 
     '''
@@ -134,11 +134,11 @@ class BackupManager:
             json.dump(file_info, f, indent=4)
 
     def init_all_backups(self):
-        if 'backup_locations' in self.config_data and self.backup_device_name in self.config_data['backup_locations']:
-            folders_to_track = self.config_data['backup_locations'][self.backup_device_name]
+        if 'backup_locations' in self.config_data and self.backup_location_name in self.config_data['backup_locations']:
+            folders_to_track = self.config_data['backup_locations'][self.backup_location_name]
             self.init_backup(folders_to_track)
         else:
-            self.logger.error(f"No tracked folders found for backup device '{self.backup_device_name}'.")
+            self.logger.error(f"No tracked folders found for backup location '{self.backup_location_name}'.")
 
     '''
     Backups
@@ -200,7 +200,7 @@ class BackupManager:
             # Save new snapshot file information
             self._save_file_info(file_info, os.path.join(self.new_snapshot_folder, FILE_INFO_FILE_NAME))
 
-            self.logger.info("Backup completed successfully.")
+            self.logger.info(f"Backup created successfully at path: {self.new_snapshot_folder}")
 
         except Exception as e:
             self.logger.error(f"Backup failed: {e}")
@@ -255,14 +255,14 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--backup-device-name", type=str,
-                        help="The name of the backup device.", required=True)
+    parser.add_argument("--backup-location-name", type=str,
+                        help="The name of the backup location.", required=True)
     parser.add_argument("--view-tracked-folders", action="store_true",
-                        help="View the tracked folders for the specified backup device.")
+                        help="View the tracked folders for the specified backup location.")
     parser.add_argument("--add-folders", nargs='+',
-                        help="Add new folder paths to track for the specified backup device.")
+                        help="Add new folder paths to track for the specified backup location.")
     parser.add_argument("--remove-folders", nargs='+',
-                        help="Remove folder paths from tracking for the specified backup device.")
+                        help="Remove folder paths from tracking for the specified backup location.")
     parser.add_argument("--init", nargs='+',
                         help="Initialize backup tracking with snapshot for specific folders.")
     parser.add_argument("--init-all", action="store_true",
@@ -270,7 +270,7 @@ def main():
 
     parsed_args = parser.parse_args()
 
-    manager = BackupManager(parsed_args.backup_device_name)
+    manager = BackupManager(parsed_args.backup_location_name)
     os.makedirs(os.path.join(manager.backups_folder_name, LOG_FILE_PATH), exist_ok=True)
     logger = setup_logging(log_file=os.path.join(manager.backups_folder_name, LOG_FILE_PATH,
                                                  os.path.basename(manager.new_snapshot_folder) + ".log"))
@@ -279,19 +279,19 @@ def main():
     if parsed_args.view_tracked_folders:
         tracked_folders = manager.get_tracked_folders()
         if tracked_folders:
-            logger.info(f"Tracked folders for backup device '{parsed_args.backup_device_name}':")
+            logger.info(f"Tracked folders for backup location '{parsed_args.backup_location_name}':")
             for folder in tracked_folders:
                 logger.info(f"- {folder}")
         else:
-            logger.info(f"No tracked folders found for backup device '{parsed_args.backup_device_name}'.")
+            logger.info(f"No tracked folders found for backup location '{parsed_args.backup_location_name}'.")
     elif parsed_args.add_folders:
         manager.add_folders(parsed_args.add_folders)
-        logger.info(f"Added folders to backup device '{parsed_args.backup_device_name}':")
+        logger.info(f"Added folders to backup location '{parsed_args.backup_location_name}':")
         for folder in parsed_args.add_folders:
             logger.info(f"- {folder}")
     elif parsed_args.remove_folders:
         manager.remove_folders(parsed_args.remove_folders)
-        logger.info(f"Removed folders from backup device '{parsed_args.backup_device_name}':")
+        logger.info(f"Removed folders from backup location '{parsed_args.backup_location_name}':")
         for folder in parsed_args.remove_folders:
             logger.info(f"- {folder}")
     elif parsed_args.init:

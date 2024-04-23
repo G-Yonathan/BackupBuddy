@@ -1,19 +1,25 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Check if the path argument is provided.
+REM Check if both path arguments are provided.
 if "%~1" == "" (
-    echo Usage: %~nx0 "path_to_delete_from"
+    echo Usage: %~nx0 "path_to_delete_from" "path_to_delete_list.txt"
     exit /b 1
 )
 
 REM Set the path to delete from from the command-line argument.
 set "delete_location=%~1"
 
-REM Set the hardcoded filename for the text file containing relative paths.
-set "file_list=to_delete.txt"
+REM Set the path to the text file containing paths to delete from the command-line argument.
+set "file_list=%~2"
 
-REM Check if the file exists.
+REM Check if the file list path argument is provided.
+if "%file_list%" == "" (
+    echo Usage: %~nx0 "path_to_delete_from" "path_to_delete_list.txt"
+    exit /b 1
+)
+
+REM Check if the file list exists.
 if not exist "%file_list%" (
     echo File not found: "%file_list%"
     exit /b 1

@@ -1,36 +1,91 @@
 # BackupBuddy
 
-BackupBuddy is a powerful and user-friendly backup utility that helps you safeguard your valuable data and files effortlessly. Whether you are an individual user or a business professional, BackupBuddy makes it easy to create backups, restore data, and ensure data protection against accidental data loss, hardware failure, or other unforeseen events.
+BackupBuddy is a powerful and user-friendly backup utility that helps you safeguard your valuable data and files
+effortlessly. Whether you are an individual user or a business professional, BackupBuddy makes it easy to create
+backups, restore data, and ensure data protection against accidental data loss, hardware failure, or other unforeseen
+events.
 
 ## Features
 
-- Might not delete all your files, I'm not responsible if it does.
-  
-## Installation
+- Enables simultaneous tracking of multiple backup locations.
+- Supports tracking multiple folders, offering flexibility to track different folders for each backup location as
+  needed.
 
-- Make sure you have python3 installed.
+## Requirements
+
+- Python3
 
 ## Usage
 
 Run BackupBuddy from the command line or using the GUI (jk there's no GUI 😄)
 
-1. Configure the folder that you want to backup (choose one folder per instance of the script).
-   - ```python main.py --folder-to-backup "C:\folder\to\backup"```
-2. Complete your first backup without using the script (the script won't really help here as everything needs to be copied anyways). Once that's done, you can run the script with ```--init``` flag to begin tracking changes. This will create a "backups" folder with the current state of your files.
-   - ```python main.py --init```
-3. Go make some changes! You can add new files, modify existing files, and delete files.
-4. Run the script without any flags:
-   - ```python main.py```
-5. A new folder will be created in the backups folder containing a log file and more importantly a "to_tranfer" folder. This is the folder that should be transferred to your backup device.
-6. Once you have transferred the "to_transfer" folder, you need to perform two steps:
-   - Copy the contents of the additions folder to your backup location. Allow file explorer to merge.
-   - Run the delete.bat script directly from it's location, providing full path to the backup location as an argument. This will delete all the files that you have deleted since the last backup. You can view these files prior to running the script in "to_delete.txt" to ensure you're not deleting anything you want to keep.
-     - ```delete.bat "C:\path\to\backup\location"```
+### Managing tracked folders:
 
-## Support
+Each backup location has its own list of folders that it tracks. The following flags may be used to interact with the
+list:
 
-If you have any questions, feedback, or support inquiries, you are welcome to relay them to your grandma as it will have the same effect as contacting me and will save me from having to pretend I care.
+- **Adding folders**:
+
+```commandline
+python main.py --backup-location-name BACKUP_LOCATION_NAME --add-folders PATH/TO/TRACK ANOTHER/PATH/TO/TRACK
+```
+
+- **Removing folders**:
+
+```commandline
+python main.py --backup-location-name BACKUP_LOCATION_NAME --remove-folders PATH/TO/REMOVE ANOTHER/PATH/TO/REMOVE
+```
+
+- **Viewing tracked folders**:
+
+```commandline
+python main.py --backup-location-name BACKUP_LOCATION_NAME --view-tracked-folders
+```
+
+### Initializing Backup Tracking
+
+After adding folders to track, initialize the backup by copying the folders to the backup location and running the
+following command:
+
+```commandline
+python main.py --backup-location-name BACKUP_LOCATION_NAME --init-all
+```
+
+Alternatively, you can specify specific folders to initialize like so:
+
+```commandline
+python main.py --backup-location-name BACKUP_LOCATION_NAME --init PATH/TO/INITIALIZE ANOTHER/PATH/TO/INITIALIZE
+```
+
+This step makes BackupBuddy take a snapshot of the current state of the folders in order to track changes from this
+point onward.
+
+### Creating Snapshot for Backup
+
+To create the files necessary for synchronizing your backup with new changes that you have made in your tracked folders,
+simply run:
+
+```commandline
+python main.py --backup-location-name BACKUP_LOCATION_NAME
+```
+
+This will generate a ```to_transfer``` folder within the ```backups``` directory. It will also take a snapshot of the
+current state of your folders.
+
+### Synchronizing Changes
+
+Transfer the ```to_transfer``` folder to the backup location and navigate to it.
+
+1. First, open the ```additions``` folder and copy the folders to the corresponding locations of the old backup. Allow
+   file explorer to merge.
+2. Next, notice that each folder has a corresponding ```{FOLDER_NAME}_deleted_paths.txt``` file. Run the delete.bat
+   script for each folder from which files have been deleted, like so:
+   ```commandline
+   delete.bat PATH\TO\BACKED\UP\FOLDER {FOLDER_NAME}_deleted_paths.txt
+   ```
+
+Your backed up folders should now be up-to-date.
 
 ---
 
-© 2023 BackupBuddy. All rights reserved.
+© 2024 BackupBuddy. All rights reserved.
